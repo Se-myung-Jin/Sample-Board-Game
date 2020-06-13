@@ -17,10 +17,11 @@
 
 #pragma comment (lib, "ws2_32.lib")
 
-#define MAX_SOCKBUF			20			// Recv를 위한 버퍼 크기
-#define MAX_CLIENT			2			// 최대 접속자 수
+#define MAX_SOCKBUF			256			// Recv를 위한 버퍼 크기
+#define MAX_CLIENT			30			// 최대 접속자 수
 #define MAX_WORKERTHREAD	5			// 작업자 쓰레드의 갯수
 #define MAX_PACKET_SIZE		256
+#define PORTNUM				5432
 
 enum enumOperation
 {

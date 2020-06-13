@@ -125,16 +125,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="GameProtocol.h" />
     <ClInclude Include="Global.h" />
     <ClInclude Include="Iocp.h" />
     <ClInclude Include="IocpServer.h" />
     <ClInclude Include="NetworkSession.h" />
+    <ClInclude Include="NumericalBaseBall.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="GameProtocol.cpp" />
     <ClCompile Include="Iocp.cpp" />
     <ClCompile Include="IocpServer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="NetworkSession.cpp" />
+    <ClCompile Include="NumericalBaseBall.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

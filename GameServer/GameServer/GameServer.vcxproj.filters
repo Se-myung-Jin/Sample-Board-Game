@@ -27,6 +27,12 @@
     <ClInclude Include="IocpServer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="NumericalBaseBall.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="GameProtocol.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Iocp.cpp">
@@ -39,6 +45,12 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="NumericalBaseBall.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="GameProtocol.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

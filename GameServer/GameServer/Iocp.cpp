@@ -272,19 +272,6 @@ void Iocp::AccepterThread()
 		printf("[TCP 서버] 클라이언트 접속: IP 주소=%s, 포트 번호=%d\n",
 			inet_ntoa(ClientAddr.sin_addr), ntohs(ClientAddr.sin_port));
 
-		if (m_ClientCnt > MAX_CLIENT - 1)
-		{
-			printf("인원 초과! 접속을 해지합니다.\n");
-
-			SOCKADDR_IN clientaddr;
-			int addrlen = sizeof(clientaddr);
-			getpeername(pClientInfo->m_socketClient, (SOCKADDR *)&clientaddr, &addrlen);
-			printf("[TCP 서버] 클라이언트 종료: IP 주소=%s, 포트 번호=%d\n", inet_ntoa(clientaddr.sin_addr), ntohs(clientaddr.sin_port));
-
-			CloseSocket(pClientInfo);
-			continue;
-		}
-
 		if (!RegSockToIocp(pClientInfo))
 			return;
 
@@ -321,11 +308,6 @@ void Iocp::WorkerThread()
 		// client가 접속을 끊었을 경우
 		if (!bSuccess && dwIoSize == 0 && pClientInfo != NULL)
 		{
-			// RingBuffer 초기화
-
-			// Todo SendQueue cleanup
-
-
 			// 접속 종료 처리
 			DisConnectProcess(pClientInfo);
 
@@ -349,22 +331,28 @@ void Iocp::WorkerThread()
 
 		// Overlapped I/O Recv작업 결과 뒤 처리
 		// 데이터를 수신한 경우
-		if (pOverlappedEx->m_Operation == OP_RECV) {
+		if (pOverlappedEx->m_Operation == OP_RECV) 
+		{
 			unsigned char *buf_ptr = pOverlappedEx->m_IOCPbuf;
 			int restDataSize = dwIoSize;
-			while (restDataSize) {
+			
+			while (restDataSize) 
+			{
 				if (0 == pOverlappedEx->receiving_packet_size)   // 미완성 패킷이 존재하지 않는다. 패킷이 처음부터 전송되었다.
 					pOverlappedEx->receiving_packet_size = (int)buf_ptr[0];  // 첫번째 바이트가 패킷 크기이다.
+				
 				int required = pOverlappedEx->receiving_packet_size - pOverlappedEx->received;
 
-				if (restDataSize < required) { // 더이상 패킷을 만들 수 없다. 루프를 중지한다.
+				if (restDataSize < required) 
+				{ // 더이상 패킷을 만들 수 없다. 루프를 중지한다.
 					memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
 						buf_ptr,
 						restDataSize);
 					m_networkSession->Recv(pClientInfo);
 					break;
 				}
-				else { // 패킷을 완성할 수 있다.
+				else 
+				{ // 패킷을 완성할 수 있다.
 					memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
 						buf_ptr,
 						required);
@@ -377,15 +365,19 @@ void Iocp::WorkerThread()
 			}
 			m_networkSession->Recv(pClientInfo);
 		}
-		else if (pOverlappedEx->m_Operation == OP_SEND) {
+		else if (pOverlappedEx->m_Operation == OP_SEND) 
+		{
 			pOverlappedEx->m_RemainLen -= dwIoSize;
-			if (0 < pOverlappedEx->m_RemainLen) { // 패킷을 다 보내지 못했음
+			if (0 < pOverlappedEx->m_RemainLen) 
+			{ // 패킷을 다 보내지 못했음
 				pOverlappedEx->m_wsaBuf.buf += dwIoSize;
 				pOverlappedEx->m_wsaBuf.len = pOverlappedEx->m_RemainLen;
 				m_networkSession->Send(pClientInfo);
 			}
-			else { // 한 패킷을 다 보냈음. 다음 보낼 패킷 검사
-				if (!pOverlappedEx->m_SendPacketQueue.empty()) {
+			else 
+			{ // 한 패킷을 다 보냈음. 다음 보낼 패킷 검사
+				if (!pOverlappedEx->m_SendPacketQueue.empty()) 
+				{
 					unsigned char *packet_ptr = pOverlappedEx->m_SendPacketQueue.front();
 					pOverlappedEx->m_SendPacketQueue.pop();
 					unsigned packet_size = packet_ptr[0];
@@ -396,12 +388,15 @@ void Iocp::WorkerThread()
 					pOverlappedEx->m_wsaBuf.len = pOverlappedEx->m_RemainLen;
 					m_networkSession->Send(pClientInfo);
 				}
-				else { // 더이상 보낼것이 없음. Nobusy 세팅 필요
+				else 
+				{ // 더이상 보낼것이 없음. Nobusy 세팅 필요
 					pOverlappedEx->m_busySending = false;
 				}
 			}
 		}
-		else { // Error
+		else 
+		{ // Error
+		
 		}
 	}
 }

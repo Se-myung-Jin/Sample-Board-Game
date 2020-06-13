@@ -33,7 +33,7 @@ bool NetworkSession::TCPBind()
 {
 	SOCKADDR_IN stServerAddr;
 	stServerAddr.sin_family = AF_INET;
-	stServerAddr.sin_port = htons(9000);
+	stServerAddr.sin_port = htons(5432);
 	stServerAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	int nRet = bind(listenSocket, (SOCKADDR*)&stServerAddr, sizeof(SOCKADDR_IN));
