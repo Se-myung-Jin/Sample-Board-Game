@@ -22,6 +22,7 @@ void NumericalBaseBall::startConfig()
 
 		cout << targetNum[i] << " ";
 	}
+	cout << endl;
 }
 
 void NumericalBaseBall::inputNumbers()

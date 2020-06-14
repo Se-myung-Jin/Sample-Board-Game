@@ -2,6 +2,7 @@
 #include "NetworkSession.h"
 #include "Global.h"
 
+#include <mutex>
 
 class Iocp
 {
@@ -24,7 +25,8 @@ public:
 
 	bool				CreateThreads();
 	bool				CreateWorkerThread();				
-	bool				CreateAccepterThread();				
+	bool				CreateAccepterThread();	
+	bool				CreatePacketProcThread();
 	
 	ClientInfo*			GetEmptyClientInfo();				// 사용하지 않는 클라이언트 정보 구조체를 반환
 
@@ -32,6 +34,7 @@ public:
 
 	void				WorkerThread();			// 작업자 쓰레드
 	void				AccepterThread();		// 접속을 받는 쓰레드
+	void				PacketProcThread();
 
 	void				DestroyThread();		// 생성되어 있는 쓰레드를 파괴한다.
 
@@ -48,10 +51,14 @@ private:
 	HANDLE				m_WorkerThread[MAX_WORKERTHREAD];	// 작업 쓰레드 핸들
 	HANDLE				m_AccepterThread;		// 접속 쓰레드 핸들	
 	HANDLE				m_IOCP;					// IOCP 핸들
+	HANDLE				m_PacketThread[MAX_WORKERTHREAD];
 
 	bool				m_WorkerRun;			// 작업 쓰레드 동작 플래그
 	bool				m_AccepterRun;			// 접속 쓰레드 동작 플래그
 	char				m_SocketBuf[1024];	// 소켓 버퍼
+
+	queue<tuple<DWORD, ClientInfo*, LPOVERLAPPED>> que;
+	mutex m_mutex;
 
 protected:
 	NetworkSession*		m_networkSession;

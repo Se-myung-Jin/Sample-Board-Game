@@ -16,6 +16,14 @@ DWORD WINAPI CallAccepterThread(LPVOID arg)
 	return 0;
 }
 
+DWORD WINAPI CallPacketProcThread(LPVOID arg)
+{
+	Iocp* pIocp = (Iocp*)arg;
+	pIocp->PacketProcThread();
+
+	return 0;
+}
+
 Iocp::Iocp(void)
 {
 	// 모든 멤버 변수들 초기화
@@ -30,6 +38,9 @@ Iocp::Iocp(void)
 		m_WorkerThread[i] = NULL;
 	// Client정보를 저장할 구조체를 생성
 	m_ClientInfo = new ClientInfo[MAX_CLIENT];
+
+	for (int i = 0; i < MAX_WORKERTHREAD; i++)
+		m_PacketThread[i] = NULL;
 }
 
 Iocp::~Iocp(void)
@@ -92,7 +103,7 @@ bool Iocp::Begin()
 	// IOCP 생성
 	if (!CreateIocp())
 		End();
-	
+
 	// Accept Thread와 Worker Thread 생성
 	if (!CreateThreads())
 		End();
@@ -150,6 +161,9 @@ bool Iocp::CreateThreads()
 	if (!CreateAccepterThread())
 		return false;
 
+	if (!CreatePacketProcThread())
+		return false;
+
 	return true;
 }
 
@@ -200,6 +214,24 @@ bool Iocp::CreateAccepterThread()
 	}
 
 	ResumeThread(m_AccepterThread);
+	return true;
+}
+
+bool Iocp::CreatePacketProcThread()
+{
+	DWORD uiThreadId = 0;
+
+	for (int i = 0; i < MAX_WORKERTHREAD; i++)
+	{
+		//		m_hWorkerThread[i] = (HANDLE)_beginthreadex( NULL, 0, &CallWorkerThread, this, CREATE_SUSPENDED, &uiThreadId );
+		m_PacketThread[i] = CreateThread(NULL, 0, CallPacketProcThread, this, CREATE_SUSPENDED, &uiThreadId);
+		if (m_PacketThread == NULL)
+		{
+			return false;
+		}
+		ResumeThread(m_PacketThread[i]);
+	}
+
 	return true;
 }
 
@@ -326,77 +358,116 @@ void Iocp::WorkerThread()
 			m_WorkerRun = false;
 			continue;
 		}
+		
+		que.push(make_tuple(dwIoSize, pClientInfo, lpOverlapped));
+	}
+}
 
-		OverlappedEx* pOverlappedEx = (OverlappedEx*)lpOverlapped;
+void Iocp::PacketProcThread()
+{
+	while (true)
+	{
+		ClientInfo* pClientInfo = NULL;
+		DWORD dwIoSize = 0;
+		LPOVERLAPPED lpOverlapped = NULL;
 
-		// Overlapped I/O Recv작업 결과 뒤 처리
-		// 데이터를 수신한 경우
-		if (pOverlappedEx->m_Operation == OP_RECV) 
+		//m_mutex.lock();
+		if (!que.empty())
 		{
-			unsigned char *buf_ptr = pOverlappedEx->m_IOCPbuf;
-			int restDataSize = dwIoSize;
-			
-			while (restDataSize) 
+			m_mutex.lock();
 			{
-				if (0 == pOverlappedEx->receiving_packet_size)   // 미완성 패킷이 존재하지 않는다. 패킷이 처음부터 전송되었다.
-					pOverlappedEx->receiving_packet_size = (int)buf_ptr[0];  // 첫번째 바이트가 패킷 크기이다.
-				
-				int required = pOverlappedEx->receiving_packet_size - pOverlappedEx->received;
-
-				if (restDataSize < required) 
-				{ // 더이상 패킷을 만들 수 없다. 루프를 중지한다.
-					memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
-						buf_ptr,
-						restDataSize);
-					m_networkSession->Recv(pClientInfo);
-					break;
-				}
-				else 
-				{ // 패킷을 완성할 수 있다.
-					memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
-						buf_ptr,
-						required);
-					bool ret = PacketProcess(pOverlappedEx->m_packet_buf, pClientInfo);
-					pOverlappedEx->received = 0;
-					restDataSize -= required;
-					buf_ptr += required;
-					pOverlappedEx->receiving_packet_size = 0;
-				}
-			}
-			m_networkSession->Recv(pClientInfo);
-		}
-		else if (pOverlappedEx->m_Operation == OP_SEND) 
-		{
-			pOverlappedEx->m_RemainLen -= dwIoSize;
-			if (0 < pOverlappedEx->m_RemainLen) 
-			{ // 패킷을 다 보내지 못했음
-				pOverlappedEx->m_wsaBuf.buf += dwIoSize;
-				pOverlappedEx->m_wsaBuf.len = pOverlappedEx->m_RemainLen;
-				m_networkSession->Send(pClientInfo);
-			}
-			else 
-			{ // 한 패킷을 다 보냈음. 다음 보낼 패킷 검사
-				if (!pOverlappedEx->m_SendPacketQueue.empty()) 
+				if (que.empty())
 				{
-					unsigned char *packet_ptr = pOverlappedEx->m_SendPacketQueue.front();
-					pOverlappedEx->m_SendPacketQueue.pop();
-					unsigned packet_size = packet_ptr[0];
-					memcpy(pOverlappedEx->m_IOCPbuf, packet_ptr, packet_size);
-					free(packet_ptr);
-					pOverlappedEx->m_RemainLen = packet_size;
-					pOverlappedEx->m_wsaBuf.buf = (CHAR *)pOverlappedEx->m_IOCPbuf;
+					m_mutex.unlock();
+					continue;
+				}
+
+				tuple<DWORD, ClientInfo*, LPOVERLAPPED> obj = que.front();
+				//tuple<DWORD, PULONG_PTR, LPOVERLAPPED> obj = que.front();
+				dwIoSize = get<0>(obj);
+				pClientInfo = (ClientInfo*)get<1>(obj);
+				lpOverlapped = get<2>(obj);
+				que.pop();
+			}
+			m_mutex.unlock();
+
+			OverlappedEx* pOverlappedEx = (OverlappedEx*)lpOverlapped;
+
+			// Overlapped I/O Recv작업 결과 뒤 처리
+			// 데이터를 수신한 경우
+			if (pOverlappedEx->m_Operation == OP_RECV)
+			{
+				unsigned char *buf_ptr = pOverlappedEx->m_IOCPbuf;
+				int restDataSize = dwIoSize;
+
+				while (restDataSize)
+				{
+					if (0 == pOverlappedEx->receiving_packet_size)   // 미완성 패킷이 존재하지 않는다. 패킷이 처음부터 전송되었다.
+						pOverlappedEx->receiving_packet_size = (int)buf_ptr[0];  // 첫번째 바이트가 패킷 크기이다.
+
+					int required = pOverlappedEx->receiving_packet_size - pOverlappedEx->received;
+					//cout << "required= " << required << endl;
+
+					if (restDataSize < required) // 더이상 패킷을 만들 수 없다. 루프를 중지한다.
+					{
+						memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
+							buf_ptr,
+							restDataSize);
+						m_networkSession->Recv(pClientInfo);
+						break;
+					}
+
+					else  // 패킷을 완성할 수 있다. 
+					{
+						memcpy(pOverlappedEx->m_packet_buf + pOverlappedEx->received,
+							buf_ptr,
+							required);
+						bool ret = PacketProcess(pOverlappedEx->m_packet_buf, pClientInfo);
+						pOverlappedEx->received = 0;
+						restDataSize -= required;
+						buf_ptr += required;
+						pOverlappedEx->receiving_packet_size = 0;
+					}
+				}
+				m_networkSession->Recv(pClientInfo);
+			}
+
+			// 데이터를 송신할 경우
+			else if (pOverlappedEx->m_Operation == OP_SEND)
+			{
+				pOverlappedEx->m_RemainLen -= dwIoSize;
+				if (0 < pOverlappedEx->m_RemainLen)    // 패킷을 다 보내지 못했음
+				{
+					pOverlappedEx->m_wsaBuf.buf += dwIoSize;
 					pOverlappedEx->m_wsaBuf.len = pOverlappedEx->m_RemainLen;
 					m_networkSession->Send(pClientInfo);
 				}
-				else 
-				{ // 더이상 보낼것이 없음. Nobusy 세팅 필요
-					pOverlappedEx->m_busySending = false;
+
+				else { // 한 패킷을 다 보냈음. 다음 보낼 패킷 검사
+					if (!pOverlappedEx->m_SendPacketQueue.empty())
+					{
+						unsigned char *packet_ptr = pOverlappedEx->m_SendPacketQueue.front();
+						pOverlappedEx->m_SendPacketQueue.pop();
+						unsigned packet_size = packet_ptr[0];
+						memcpy(pOverlappedEx->m_IOCPbuf, packet_ptr, packet_size);
+						free(packet_ptr);
+						pOverlappedEx->m_RemainLen = packet_size;
+						pOverlappedEx->m_wsaBuf.buf = (CHAR *)pOverlappedEx->m_IOCPbuf;
+						pOverlappedEx->m_wsaBuf.len = pOverlappedEx->m_RemainLen;
+						m_networkSession->Send(pClientInfo);
+					}
+					else { // 더이상 보낼것이 없음. Nobusy 세팅 필요
+						pOverlappedEx->m_busySending = false;
+					}
 				}
 			}
+			else { // Error
+			}
 		}
-		else 
-		{ // Error
-		
+		else
+		{
+			//m_mutex.unlock();
+			Sleep(300);
 		}
 	}
 }
